@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TikTok Pipeline — The Invisible Monastery</title>
+  <style>
+    :root {
+      --bg: #0a0a0a;
+      --surface: #111111;
+      --surface2: #1a1a1a;
+      --border: #2a2a2a;
+      --accent: #c8a97e;
+      --accent-dim: #8a7055;
+      --text: #e8e2d9;
+      --text-dim: #8a8078;
+      --green: #4caf7d;
+      --red: #cf6679;
+      --blue: #6b9fd4;
+      --radius: 10px;
+      --font: 'Inter', system-ui, -apple-system, sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── Header ── */
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 18px 28px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .logo-icon {
+      width: 34px; height: 34px;
+      background: var(--accent);
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px;
+    }
+    .logo-text {
+      display: flex; flex-direction: column;
+    }
+    .logo-title { font-size: 15px; font-weight: 600; color: var(--text); letter-spacing: 0.02em; }
+    .logo-sub { font-size: 11px; color: var(--text-dim); letter-spacing: 0.08em; text-transform: uppercase; }
+
+    .header-actions { display: flex; gap: 10px; align-items: center; }
+
+    .status-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--text-dim);
+      display: inline-block;
+      transition: background 0.3s;
+    }
+    .status-dot.ready { background: var(--green); }
+    .status-dot.error { background: var(--red); }
+
+    .btn {
+      padding: 8px 16px;
+      border-radius: 7px;
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      color: var(--text);
+      font-size: 13px;
+      font-family: var(--font);
+      cursor: pointer;
+      transition: all 0.15s;
+      display: inline-flex; align-items: center; gap: 7px;
+    }
+    .btn:hover { border-color: var(--accent-dim); background: #222; }
+    .btn.primary {
+      background: var(--accent);
+      color: #0a0a0a;
+      border-color: var(--accent);
+      font-weight: 600;
+    }
+    .btn.primary:hover { background: #d4b589; }
+    .btn.primary:disabled { background: var(--accent-dim); cursor: not-allowed; opacity: 0.6; }
+    .btn.ghost { background: transparent; border-color: transparent; color: var(--text-dim); }
+    .btn.ghost:hover { color: var(--text); background: var(--surface2); }
+    .btn.send {
+      background: transparent;
+      border-color: var(--green);
+      color: var(--green);
+    }
+    .btn.send:hover { background: rgba(76,175,125,0.1); }
+
+    /* ── Main Layout ── */
+    main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0;
+      height: calc(100vh - 65px);
+    }
+
+    .panel {
+      padding: 28px;
+      border-right: 1px solid var(--border);
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .panel:last-child { border-right: none; }
+
+    .panel-label {
+      font-size: 11px;
+      color: var(--text-dim);
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      font-weight: 600;
+    }
+
+    /* ── Input area ── */
+    textarea {
+      width: 100%;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 14px;
+      line-height: 1.65;
+      padding: 16px;
+      resize: vertical;
+      min-height: 180px;
+      transition: border-color 0.15s;
+    }
+    textarea:focus { outline: none; border-color: var(--accent-dim); }
+    textarea::placeholder { color: var(--text-dim); }
+
+    .input-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 12px;
+      color: var(--text-dim);
+    }
+
+    /* ── Style Chips ── */
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .chip {
+      padding: 5px 12px;
+      border-radius: 20px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text-dim);
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.15s;
+      user-select: none;
+    }
+    .chip:hover { border-color: var(--accent-dim); color: var(--text); }
+    .chip.active { border-color: var(--accent); color: var(--accent); background: rgba(200,169,126,0.08); }
+
+    /* ── Generate row ── */
+    .gen-row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    /* ── Output Cards ── */
+    .output-section {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .section-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      transition: border-color 0.15s;
+      position: relative;
+    }
+    .card:hover { border-color: #3a3a3a; }
+
+    .card-label {
+      font-size: 10px;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 10px;
+      font-weight: 600;
+    }
+
+    .title-options {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .title-opt {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      padding: 10px 12px;
+      border-radius: 7px;
+      background: var(--surface2);
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .title-opt:hover { border-color: var(--accent-dim); }
+    .title-opt.selected { border-color: var(--accent); background: rgba(200,169,126,0.08); }
+    .title-num {
+      min-width: 20px; height: 20px;
+      background: var(--border);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 10px;
+      color: var(--text-dim);
+      font-weight: 600;
+      margin-top: 1px;
+    }
+    .title-opt.selected .title-num {
+      background: var(--accent);
+      color: #0a0a0a;
+    }
+    .title-text { font-size: 14px; line-height: 1.5; color: var(--text); }
+
+    .desc-text {
+      font-size: 14px;
+      line-height: 1.7;
+      color: var(--text);
+      white-space: pre-wrap;
+    }
+
+    .hashtag-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .hashtag {
+      padding: 4px 10px;
+      background: var(--surface2);
+      border-radius: 20px;
+      font-size: 12px;
+      color: var(--blue);
+      border: 1px solid var(--border);
+    }
+
+    .copy-btn {
+      position: absolute;
+      top: 12px; right: 12px;
+      padding: 4px 10px;
+      font-size: 11px;
+      opacity: 0;
+      transition: opacity 0.15s;
+    }
+    .card:hover .copy-btn { opacity: 1; }
+
+    /* ── Empty state ── */
+    .empty-state {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      color: var(--text-dim);
+      text-align: center;
+      padding: 40px;
+    }
+    .empty-icon { font-size: 40px; opacity: 0.4; }
+    .empty-title { font-size: 15px; color: var(--text-dim); }
+    .empty-sub { font-size: 13px; color: var(--text-dim); opacity: 0.6; max-width: 260px; line-height: 1.5; }
+
+    /* ── Bottom bar ── */
+    .bottom-bar {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      padding-top: 8px;
+      border-top: 1px solid var(--border);
+      margin-top: auto;
+    }
+
+    /* ── Loading ── */
+    .spinner {
+      width: 16px; height: 16px;
+      border: 2px solid rgba(0,0,0,0.3);
+      border-top-color: #0a0a0a;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      display: inline-block;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Toast ── */
+    #toast {
+      position: fixed;
+      bottom: 28px; left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 20px;
+      font-size: 13px;
+      color: var(--text);
+      opacity: 0;
+      transition: all 0.25s;
+      pointer-events: none;
+      z-index: 9999;
+    }
+    #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    #toast.success { border-color: var(--green); color: var(--green); }
+    #toast.err { border-color: var(--red); color: var(--red); }
+
+    /* ── Modal ── */
+    .modal-bg {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.7);
+      z-index: 100;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-bg.open { display: flex; }
+    .modal {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 28px;
+      width: 440px;
+      max-width: 94vw;
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .modal h2 { font-size: 17px; font-weight: 600; }
+    .field {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+    .field label {
+      font-size: 12px;
+      color: var(--text-dim);
+      font-weight: 500;
+      letter-spacing: 0.04em;
+    }
+    .field input {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text);
+      font-family: var(--font);
+      font-size: 13px;
+      padding: 10px 14px;
+      transition: border-color 0.15s;
+      width: 100%;
+    }
+    .field input:focus { outline: none; border-color: var(--accent-dim); }
+    .field .hint { font-size: 11px; color: var(--text-dim); line-height: 1.5; }
+    .modal-actions { display: flex; gap: 10px; justify-content: flex-end; }
+
+    .history-list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      max-height: 200px;
+      overflow-y: auto;
+    }
+    .history-item {
+      padding: 10px 12px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .history-item:hover { border-color: var(--accent-dim); }
+    .history-title { font-size: 13px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .history-time { font-size: 11px; color: var(--text-dim); margin-top: 3px; }
+
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">🏔</div>
+    <div class="logo-text">
+      <span class="logo-title">TikTok Pipeline</span>
+      <span class="logo-sub">The Invisible Monastery</span>
+    </div>
+  </div>
+  <div class="header-actions">
+    <span id="statusDot" class="status-dot" title="Not configured"></span>
+    <button class="btn ghost" onclick="openSettings()">⚙ Setup</button>
+    <button class="btn ghost" onclick="toggleHistory()">📋 History</button>
+  </div>
+</header>
+
+<main>
+  <div class="panel" id="leftPanel">
+    <div><div class="panel-label">Input</div></div>
+
+    <div id="historySection" style="display:none;">
+      <div class="panel-label" style="margin-bottom:10px;">Recent Sessions</div>
+      <div class="history-list" id="historyList"></div>
+      <div style="height:1px;background:var(--border);margin:8px 0;"></div>
+    </div>
+
+    <div class="field">
+      <label>VIDEO TRANSCRIPT / BRIEF</label>
+      <textarea id="transcript" placeholder="Paste your video transcript or describe your clip here...
+
+Example: 'In this video I talk about how most people confuse discipline with suffering. True discipline feels like freedom, not punishment...'"></textarea>
+      <div class="input-meta">
+        <span id="charCount">0 characters</span>
+        <button class="btn ghost" style="font-size:11px;padding:3px 8px;" onclick="clearInput()">Clear</button>
+      </div>
+    </div>
+
+    <div>
+      <label class="panel-label" style="display:block;margin-bottom:10px;">CONTENT STYLE</label>
+      <div class="chips">
+        <div class="chip active" onclick="selectChip(this,'insight')">💡 Insight</div>
+        <div class="chip" onclick="selectChip(this,'provoke')">🔥 Provoke</div>
+        <div class="chip" onclick="selectChip(this,'story')">📖 Story</div>
+        <div class="chip" onclick="selectChip(this,'question')">❓ Question</div>
+        <div class="chip" onclick="selectChip(this,'teaching')">🧘 Teaching</div>
+        <div class="chip" onclick="selectChip(this,'rawtruth')">⚡ Raw Truth</div>
+      </div>
+    </div>
+
+    <div class="gen-row">
+      <button class="btn primary" id="genBtn" onclick="generate()" style="flex:1;">Generate Copy</button>
+      <button class="btn" onclick="generate()" title="Regenerate" id="regenBtn" style="display:none;">↺</button>
+    </div>
+
+    <div id="errorMsg" style="display:none;color:var(--red);font-size:13px;padding:10px 14px;background:rgba(207,102,121,0.08);border-radius:8px;border:1px solid rgba(207,102,121,0.2);"></div>
+
+    <div style="flex:1;"></div>
+
+    <div class="bottom-bar" id="bottomBar" style="display:none;">
+      <button class="btn send" onclick="sendToMake()" id="sendBtn" style="flex:1;">🚀 Send to Make.com</button>
+      <button class="btn" onclick="copyAll()" title="Copy everything">📋</button>
+    </div>
+  </div>
+
+  <div class="panel" id="rightPanel">
+    <div class="section-head">
+      <div class="panel-label">Output</div>
+      <div id="outputMeta" style="font-size:12px;color:var(--text-dim);display:none;"><span id="genTime"></span></div>
+    </div>
+
+    <div class="empty-state" id="emptyState">
+      <div class="empty-icon">✍️</div>
+      <div class="empty-title">Ready to generate</div>
+      <div class="empty-sub">Paste your transcript, pick a style, and hit Generate</div>
+    </div>
+
+    <div class="output-section" id="outputContent" style="display:none;">
+      <div class="card">
+        <div class="card-label">Title Options (pick one)</div>
+        <button class="btn ghost copy-btn" style="font-size:11px;padding:4px 9px;" onclick="copySelected()">Copy</button>
+        <div class="title-options" id="titleOptions"></div>
+      </div>
+      <div class="card">
+        <div class="card-label">Description / Caption</div>
+        <button class="btn ghost copy-btn" style="font-size:11px;padding:4px 9px;" onclick="copyField('desc')">Copy</button>
+        <div class="desc-text" id="descText"></div>
+      </div>
+      <div class="card">
+        <div class="card-label">Hashtags</div>
+        <button class="btn ghost copy-btn" style="font-size:11px;padding:4px 9px;" onclick="copyField('tags')">Copy</button>
+        <div class="hashtag-row" id="hashtagRow"></div>
+      </div>
+      <div class="card" id="hookCard" style="display:none;">
+        <div class="card-label">Hook Analysis</div>
+        <div id="hookText" style="font-size:13px;line-height:1.65;color:var(--text);"></div>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div class="modal-bg" id="settingsModal">
+  <div class="modal" style="position:relative;">
+    <h2>⚙ Pipeline Setup</h2>
+    <div class="field">
+      <label>ANTHROPIC API KEY</label>
+      <input type="password" id="apiKeyInput" placeholder="sk-ant-api03-..." autocomplete="off" />
+      <div class="hint">Stored locally in your browser only — never sent anywhere except Anthropic's API.</div>
+    </div>
+    <div class="field">
+      <label>MAKE.COM WEBHOOK URL</label>
+      <input type="url" id="webhookInput" placeholder="https://hook.us1.make.com/..." />
+      <div class="hint">The webhook receives generated copy as JSON. Wire it to your TikTok posting scenario in Make.</div>
+    </div>
+    <div class="field">
+      <label>BRAND VOICE NOTE (optional)</label>
+      <input type="text" id="voiceInput" placeholder="e.g. Aukdom — direct, spiritual, no fluff, speaks to seekers" />
+      <div class="hint">Personalizes every generation to your specific voice.</div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn ghost" onclick="closeSettings()">Cancel</button>
+      <button class="btn primary" onclick="saveSettings()">Save & Close</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+let settings = { apiKey: '', webhook: '', voice: '' };
+let currentOutput = null;
+let selectedTitle = 0;
+let selectedStyle = 'insight';
+let history = [];
+
+const STYLES = {
+  insight: 'thought-provoking insight that makes viewers stop and think',
+  provoke: 'bold, provocative statement that challenges conventional thinking',
+  story: 'story-driven hook that draws viewers into a personal narrative',
+  question: 'deep question that makes viewers question their assumptions',
+  teaching: 'clear teaching moment that delivers immediate practical value',
+  rawtruth: 'raw, unfiltered truth that cuts through noise and speaks directly'
+};
+
+document.addEventListener('DOMContentLoaded', () => {
+  loadSettings();
+  updateStatus();
+  document.getElementById('transcript').addEventListener('input', e => {
+    document.getElementById('charCount').textContent = e.target.value.length + ' characters';
+  });
+});
+
+function loadSettings() {
+  try { const s = localStorage.getItem('tim_settings'); if (s) settings = { ...settings, ...JSON.parse(s) }; } catch(e) {}
+  try { const h = localStorage.getItem('tim_history'); if (h) history = JSON.parse(h); } catch(e) {}
+  if (settings.apiKey) document.getElementById('apiKeyInput').value = settings.apiKey;
+  if (settings.webhook) document.getElementById('webhookInput').value = settings.webhook;
+  if (settings.voice) document.getElementById('voiceInput').value = settings.voice;
+}
+
+function saveSettings() {
+  settings.apiKey = document.getElementById('apiKeyInput').value.trim();
+  settings.webhook = document.getElementById('webhookInput').value.trim();
+  settings.voice = document.getElementById('voiceInput').value.trim();
+  localStorage.setItem('tim_settings', JSON.stringify(settings));
+  updateStatus(); closeSettings(); toast('Settings saved ✓', 'success');
+}
+
+function updateStatus() {
+  const dot = document.getElementById('statusDot');
+  if (settings.apiKey && settings.webhook) { dot.className = 'status-dot ready'; dot.title = 'Ready'; }
+  else if (settings.apiKey) { dot.className = 'status-dot'; dot.style.background = '#c8a97e'; dot.title = 'Add webhook to enable sending'; }
+  else { dot.className = 'status-dot error'; dot.title = 'Not configured — click ⚙ Setup'; }
+}
+
+function openSettings() { document.getElementById('settingsModal').classList.add('open'); }
+function closeSettings() { document.getElementById('settingsModal').classList.remove('open'); }
+document.getElementById('settingsModal').addEventListener('click', function(e) { if (e.target === this) closeSettings(); });
+
+function selectChip(el, style) {
+  document.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+  el.classList.add('active'); selectedStyle = style;
+}
+
+async function generate() {
+  const transcript = document.getElementById('transcript').value.trim();
+  if (!transcript) { toast('Paste a transcript or brief first', 'err'); return; }
+  if (!settings.apiKey) { openSettings(); toast('Enter your Anthropic API key first', 'err'); return; }
+
+  const btn = document.getElementById('genBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Generating...';
+  document.getElementById('errorMsg').style.display = 'none';
+  document.getElementById('emptyState').style.display = 'none';
+  document.getElementById('outputContent').style.display = 'none';
+
+  const voiceNote = settings.voice ? `\nBrand voice: ${settings.voice}` : '';
+
+  const systemPrompt = `You are an expert TikTok copywriter for a spiritual/mindset brand. Your job is to generate TikTok content that stops the scroll and drives deep engagement.
+
+Brand: The Invisible Monastery — a brand about deep inner work, sovereignty, and conscious living. Speaks to seekers, self-aware individuals, people who are done with surface-level content.${voiceNote}
+
+Voice: Direct, grounded, no corporate fluff. Speaks truths people feel but haven't articulated. Short sentences. No emojis in titles. Real and human.`;
+
+  const userPrompt = `Generate TikTok copy for this video content. Style focus: ${STYLES[selectedStyle]}.
+
+TRANSCRIPT/BRIEF:
+${transcript}
+
+Return ONLY valid JSON in exactly this format (no markdown, no commentary):
+{
+  "titles": ["Title option 1 (under 80 chars, hook-first)", "Title option 2 (different angle)", "Title option 3 (most provocative)"],
+  "description": "2-3 sentence description/caption. No hashtags here.",
+  "hashtags": ["spirituality", "mindset", "selfmastery", "invisiblemonastery", "consciousliving", "innergrowth", "philosophy", "awakening"],
+  "hook_note": "One sentence explaining why the top title works as a hook."
+}`;
+
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': settings.apiKey,
+        'anthropic-version': '2023-06-01',
+        'anthropic-dangerous-direct-browser-calls': 'true'
+      },
+      body: JSON.stringify({ model: 'claude-opus-4-6', max_tokens: 1024, system: systemPrompt, messages: [{ role: 'user', content: userPrompt }] })
+    });
+
+    if (!res.ok) { const err = await res.json().catch(() => ({})); throw new Error(err.error?.message || `API error ${res.status}`); }
+
+    const data = await res.json();
+    const raw = data.content[0].text.trim();
+    const jsonStr = raw.replace(/^```json?\s*/i, '').replace(/```\s*$/, '').trim();
+    const output = JSON.parse(jsonStr);
+
+    currentOutput = { ...output, transcript, style: selectedStyle, timestamp: new Date() };
+    selectedTitle = 0;
+    renderOutput(output);
+    saveToHistory(currentOutput);
+  } catch (err) {
+    document.getElementById('errorMsg').textContent = '⚠ ' + (err.message || 'Unknown error');
+    document.getElementById('errorMsg').style.display = 'block';
+    document.getElementById('emptyState').style.display = 'flex';
+  } finally {
+    btn.disabled = false; btn.innerHTML = 'Generate Copy';
+    document.getElementById('regenBtn').style.display = 'inline-flex';
+  }
+}
+
+function renderOutput(output) {
+  const container = document.getElementById('titleOptions');
+  container.innerHTML = '';
+  (output.titles || []).forEach((t, i) => {
+    const div = document.createElement('div');
+    div.className = 'title-opt' + (i === 0 ? ' selected' : '');
+    div.innerHTML = `<div class="title-num">${i+1}</div><div class="title-text">${escHtml(t)}</div>`;
+    div.onclick = () => { container.querySelectorAll('.title-opt').forEach(el => el.classList.remove('selected')); div.classList.add('selected'); selectedTitle = i; };
+    container.appendChild(div);
+  });
+
+  document.getElementById('descText').textContent = output.description || '';
+
+  const tagRow = document.getElementById('hashtagRow');
+  tagRow.innerHTML = '';
+  (output.hashtags || []).forEach(tag => {
+    const span = document.createElement('span');
+    span.className = 'hashtag';
+    span.textContent = tag.startsWith('#') ? tag : '#' + tag;
+    tagRow.appendChild(span);
+  });
+
+  if (output.hook_note) { document.getElementById('hookText').textContent = output.hook_note; document.getElementById('hookCard').style.display = 'block'; }
+
+  document.getElementById('outputContent').style.display = 'flex';
+  document.getElementById('outputMeta').style.display = 'block';
+  document.getElementById('genTime').textContent = 'Generated ' + new Date().toLocaleTimeString();
+  document.getElementById('bottomBar').style.display = 'flex';
+}
+
+async function sendToMake() {
+  if (!settings.webhook) { openSettings(); toast('Add your Make.com webhook URL first', 'err'); return; }
+  if (!currentOutput) { toast('Generate copy first', 'err'); return; }
+  const btn = document.getElementById('sendBtn');
+  btn.disabled = true; btn.innerHTML = '⏳ Sending...';
+  const payload = {
+    title: currentOutput.titles?.[selectedTitle] || currentOutput.titles?.[0] || '',
+    all_titles: currentOutput.titles,
+    description: currentOutput.description,
+    hashtags: currentOutput.hashtags,
+    hashtag_string: (currentOutput.hashtags || []).map(t => t.startsWith('#') ? t : '#' + t).join(' '),
+    style: currentOutput.style, transcript: currentOutput.transcript, timestamp: currentOutput.timestamp
+  };
+  try {
+    await fetch(settings.webhook, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+    toast('Sent to Make.com ✓', 'success');
+  } catch(err) { toast('Send failed — check webhook URL', 'err'); }
+  finally { btn.disabled = false; btn.innerHTML = '🚀 Send to Make.com'; }
+}
+
+function copySelected() { navigator.clipboard.writeText(currentOutput?.titles?.[selectedTitle] || ''); toast('Title copied ✓', 'success'); }
+function copyField(f) {
+  if (f === 'desc') { navigator.clipboard.writeText(currentOutput?.description || ''); toast('Description copied ✓', 'success'); }
+  else { navigator.clipboard.writeText((currentOutput?.hashtags || []).map(t => t.startsWith('#') ? t : '#' + t).join(' ')); toast('Hashtags copied ✓', 'success'); }
+}
+function copyAll() {
+  if (!currentOutput) return;
+  const tags = (currentOutput.hashtags || []).map(t => t.startsWith('#') ? t : '#' + t).join(' ');
+  navigator.clipboard.writeText(`${currentOutput.titles?.[selectedTitle]}\n\n${currentOutput.description}\n\n${tags}`);
+  toast('All copied ✓', 'success');
+}
+function clearInput() { document.getElementById('transcript').value = ''; document.getElementById('charCount').textContent = '0 characters'; }
+
+function saveToHistory(output) {
+  history.unshift({ title: output.titles?.[0] || 'Untitled', time: new Date().toLocaleString(), data: output });
+  if (history.length > 20) history = history.slice(0, 20);
+  localStorage.setItem('tim_history', JSON.stringify(history));
+  renderHistory();
+}
+function toggleHistory() {
+  const s = document.getElementById('historySection');
+  s.style.display = s.style.display === 'none' ? 'block' : 'none';
+  renderHistory();
+}
+function renderHistory() {
+  const list = document.getElementById('historyList');
+  list.innerHTML = '';
+  if (!history.length) { list.innerHTML = '<div style="font-size:12px;color:var(--text-dim);padding:8px;">No history yet</div>'; return; }
+  history.forEach(item => {
+    const div = document.createElement('div');
+    div.className = 'history-item';
+    div.innerHTML = `<div class="history-title">${escHtml(item.title)}</div><div class="history-time">${item.time}</div>`;
+    div.onclick = () => { currentOutput = item.data; document.getElementById('transcript').value = item.data.transcript || ''; selectedTitle = 0; renderOutput(item.data); document.getElementById('historySection').style.display = 'none'; };
+    list.appendChild(div);
+  });
+}
+
+let toastTimer;
+function toast(msg, type = '') {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.className = 'show' + (type ? ' ' + type : '');
+  clearTimeout(toastTimer); toastTimer = setTimeout(() => el.className = '', 2800);
+}
+function escHtml(str) { return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+document.addEventListener('keydown', e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') generate(); });
+</script>
+</body>
+</html>
