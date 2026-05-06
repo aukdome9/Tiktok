@@ -1,0 +1,646 @@
+import { useState, useEffect, useRef } from 'react'
+
+const STORAGE_KEY = 'im_pipeline_config_v1'
+
+const SYSTEM_PROMPT = `You are the TikTok copy engine for Aukdom Ethnine (A.E.) — creator of The Invisible Monastery. You generate TikTok content that is spiritually grounded, direct, and built on Aukdom's proprietary worldview.
+
+BRAND VOCABULARY (use 1-2 per post, naturally):
+- Reality architect: person actively constructing their experience
+- Dimensional walker: moving between states of consciousness deliberately
+- Opulence mindset: abundance as the natural state, not something earned
+- Divine incarnation: showing up fully human IS the sacred act
+- Invisible Monastery: the internal sacred architecture a person carries
+- First nature: who you were before conditioning
+- Remembering not becoming: growth as recovery, not construction
+
+VOICE RULES:
+- Second person ("you") always
+- Direct, grounded, spiritually sovereign
+- Speak FROM the worldview, not about it
+- Short sentences hit harder
+- Never: "unlock your potential," "embark on a journey," "be the best version"
+- Never generic self-help language
+
+NICHE INTELLIGENCE:
+- Hook must land in first 3 seconds
+- Saves and shares outperform likes algorithmically
+- Content that names something felt-but-unspoken drives saves
+- Content that feels "made for someone I know" drives shares
+- Speak from conviction, not persuasion
+- Platform average engagement: 1.86% — educational spiritual content hits 9.5%
+- Under 40 seconds dramatically outperforms longer clips
+
+HOOK TYPES: Bold Claim | Reframe | Call-Out | Result Hook | Authority Statement
+
+HASHTAG RULES:
+- 4-6 hashtags max
+- Always include 1 brand tag: #invisiblemonastery OR #dimensionalwalker OR #realityarchitect OR #opulencemindset
+- Never: #fyp #foryou #foryoupage
+- Niche tags to rotate: #abundancemindset #manifestation #divinelyfavored #spiritualgrowth #lawofattraction #consciousnessexpansion #selfmastery #spiritualawakening
+
+OUTPUT: Respond ONLY with a valid JSON object. No preamble, no markdown, no backticks. Exactly this structure:
+{
+  "title": "6-10 word punchy title that stops the scroll",
+  "description": "Full caption: hook sentence | 2-3 sentence core breakdown in Aukdom voice | 1-2 sentence transformation | ends open (no CTA — added separately)",
+  "hashtags": "#tag1 #tag2 #tag3 #tag4 #tag5",
+  "topic": "2-4 word theme label (e.g. Divine Protection, Abundance Alignment)",
+  "hook_type": "one of: Bold Claim | Reframe | Call-Out | Result Hook | Authority Statement",
+  "engagement_goal": "one of: Saves | Shares | Comments"
+}`
+
+const TOPIC_SUGGESTIONS = [
+  'Divine Protection', 'Abundance Alignment', 'Shadow Integration',
+  'Opulence Mindset', 'Reality Architecture', 'Dimensional Walking',
+  'Emotional Healing', 'Manifestation', 'Self-Mastery', 'Stillness',
+]
+
+const TAG_COLORS = {
+  'Make.com': '#5BA3D9',
+  'Claude':   '#C8922A',
+  'Notion':   '#8B8FA8',
+}
+
+const CTA_EMOJIS = ['🏛️', '🔥', '🌙', '⚡', '💎', '🌿']
+
+function loadConfig() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    return raw ? JSON.parse(raw) : { webhookUrl: '', apiKey: '' }
+  } catch {
+    return { webhookUrl: '', apiKey: '' }
+  }
+}
+
+function saveConfig(config) {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify(config)) } catch {}
+}
+
+export default function App() {
+  const [config, setConfig] = useState(loadConfig)
+  const [showSetup, setShowSetup] = useState(false)
+  const [transcript, setTranscript] = useState('')
+  const [source, setSource] = useState('')
+  const [topic, setTopic] = useState('')
+  const [step, setStep] = useState('input')
+  const [result, setResult] = useState(null)
+  const [edited, setEdited] = useState({})
+  const [errorMsg, setErrorMsg] = useState('')
+  const [cta, setCta] = useState(false)
+  const [ctaEmoji, setCtaEmoji] = useState('🏛️')
+  const configRef = useRef(config)
+
+  useEffect(() => { configRef.current = config }, [config])
+
+  const handleSaveConfig = (updates) => {
+    const next = { ...config, ...updates }
+    setConfig(next)
+    saveConfig(next)
+    configRef.current = next
+    setShowSetup(false)
+  }
+
+  const generate = async () => {
+    if (!transcript.trim()) return
+    const { apiKey } = configRef.current
+    if (!apiKey) { setShowSetup(true); return }
+    setStep('generating')
+    setErrorMsg('')
+    try {
+      const res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+          'anthropic-version': '2023-06-01',
+          'anthropic-dangerous-direct-browser-access': 'true',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 1000,
+          system: SYSTEM_PROMPT,
+          messages: [{ role: 'user', content: `Generate TikTok copy for this transcript:\n\n${transcript}` }],
+        }),
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        throw new Error(err?.error?.message || `API error ${res.status}`)
+      }
+      const data = await res.json()
+      const raw = data.content?.find(b => b.type === 'text')?.text || ''
+      const clean = raw.replace(/```json|```/g, '').trim()
+      const parsed = JSON.parse(clean)
+      setResult(parsed)
+      setEdited({ ...parsed, topic: topic || parsed.topic })
+      setStep('review')
+    } catch (e) {
+      setErrorMsg(e.message || 'Generation failed. Check your API key and try again.')
+      setStep('error')
+    }
+  }
+
+  const sendToNotion = async () => {
+    const { webhookUrl } = configRef.current
+    if (!webhookUrl) { setShowSetup(true); return }
+    setStep('sending')
+    const finalDesc = cta
+      ? `${edited.description}\n\nComment ${ctaEmoji} to get a personal invitation to the Invisible Monastery community chat.`
+      : edited.description
+    try {
+      await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: edited.title,
+          description: finalDesc,
+          hashtags: edited.hashtags,
+          topic: edited.topic,
+          hook_type: edited.hook_type,
+          engagement_goal: edited.engagement_goal,
+          source: source || 'unspecified',
+          submitted_at: new Date().toISOString(),
+        }),
+      })
+      setStep('done')
+    } catch (e) {
+      setErrorMsg('Webhook delivery failed. Verify your Make.com URL in setup.')
+      setStep('error')
+    }
+  }
+
+  const reset = () => {
+    setTranscript(''); setSource(''); setTopic('')
+    setResult(null); setEdited({}); setCta(false); setCtaEmoji('🏛️')
+    setStep('input'); setErrorMsg('')
+  }
+
+  const s = (field, val) => setEdited(e => ({ ...e, [field]: val }))
+
+  const configured = config.apiKey && config.webhookUrl
+
+  return (
+    <div style={styles.root}>
+      <style>{css}</style>
+
+      {showSetup && (
+        <div style={styles.overlay}>
+          <SetupPanel config={config} onSave={handleSaveConfig} onCancel={() => setShowSetup(false)} />
+        </div>
+      )}
+
+      {/* Header */}
+      <header style={styles.header}>
+        <div style={styles.headerInner}>
+          <div>
+            <p style={styles.eyebrow}>The Invisible Monastery</p>
+            <h1 style={styles.headerTitle}>TikTok → Notion Pipeline</h1>
+          </div>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            {['Make.com', 'Claude', 'Notion'].map(t => (
+              <span key={t} style={{ ...styles.tagPill, color: TAG_COLORS[t], borderColor: TAG_COLORS[t] + '33' }}>{t}</span>
+            ))}
+            <button className="btn-ghost" style={{ marginLeft: 4 }} onClick={() => setShowSetup(true)}>⚙ setup</button>
+          </div>
+        </div>
+      </header>
+
+      <main style={styles.main}>
+
+        {/* Config warning */}
+        {!configured && step === 'input' && (
+          <div style={styles.warning}>
+            <span style={{ color: '#C8922A' }}>⚠</span>
+            &nbsp;Setup required before generating —&nbsp;
+            <span style={styles.warnLink} onClick={() => setShowSetup(true)}>open setup</span>
+            &nbsp;to add your API key and webhook URL.
+          </div>
+        )}
+
+        {/* INPUT */}
+        {(step === 'input' || step === 'error') && (
+          <div className="slide-up">
+            <div style={styles.fieldWrap}>
+              <label style={styles.label}>Transcript or clip notes</label>
+              <textarea
+                rows={9}
+                style={styles.textarea}
+                placeholder="Paste the transcript here — raw speech, rough notes, or a full clip breakdown..."
+                value={transcript}
+                onChange={e => setTranscript(e.target.value)}
+              />
+            </div>
+
+            <div style={{ display: 'flex', gap: 16 }}>
+              <div style={{ ...styles.fieldWrap, flex: 1 }}>
+                <label style={styles.label}>Source clip (optional)</label>
+                <input style={styles.input} placeholder="e.g. Portrait clip 04..." value={source} onChange={e => setSource(e.target.value)} />
+              </div>
+              <div style={{ ...styles.fieldWrap, flex: 1 }}>
+                <label style={styles.label}>Topic override (optional)</label>
+                <input style={styles.input} placeholder="Auto-detected if blank..." value={topic} onChange={e => setTopic(e.target.value)} />
+              </div>
+            </div>
+
+            <div style={styles.fieldWrap}>
+              <label style={styles.label}>Topic suggestions</label>
+              <div style={{ marginTop: 6 }}>
+                {TOPIC_SUGGESTIONS.map(t => (
+                  <span
+                    key={t}
+                    className={`chip${topic === t ? ' chip-active' : ''}`}
+                    onClick={() => setTopic(t === topic ? '' : t)}
+                  >{t}</span>
+                ))}
+              </div>
+            </div>
+
+            {step === 'error' && (
+              <p style={styles.errorMsg}>✕ {errorMsg}</p>
+            )}
+
+            <button
+              className="btn-primary"
+              disabled={!transcript.trim()}
+              onClick={generate}
+            >Generate copy →</button>
+          </div>
+        )}
+
+        {/* GENERATING */}
+        {step === 'generating' && (
+          <div className="pulsing" style={styles.centered}>
+            <p style={styles.loadingTitle}>Generating copy...</p>
+            <p style={styles.loadingSubtitle}>Running niche calibration + brand alignment</p>
+          </div>
+        )}
+
+        {/* REVIEW */}
+        {step === 'review' && edited && (
+          <div className="slide-up">
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 24 }}>
+              <div>
+                <p style={styles.eyebrow}>Review + edit</p>
+                <h2 style={styles.sectionTitle}>Copy ready</h2>
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <span style={styles.badge}>{edited.hook_type}</span>
+                <span style={styles.badge}>{edited.engagement_goal}</span>
+              </div>
+            </div>
+
+            <div style={styles.fieldWrap}>
+              <label style={styles.label}>Title</label>
+              <input style={styles.input} value={edited.title || ''} onChange={e => s('title', e.target.value)} />
+            </div>
+            <div style={styles.fieldWrap}>
+              <label style={styles.label}>Description</label>
+              <textarea rows={6} style={styles.textarea} value={edited.description || ''} onChange={e => s('description', e.target.value)} />
+            </div>
+            <div style={styles.fieldWrap}>
+              <label style={styles.label}>Hashtags</label>
+              <input style={styles.input} value={edited.hashtags || ''} onChange={e => s('hashtags', e.target.value)} />
+            </div>
+            <div style={styles.fieldWrap}>
+              <label style={styles.label}>Topic</label>
+              <input style={styles.input} value={edited.topic || ''} onChange={e => s('topic', e.target.value)} />
+            </div>
+
+            <div style={styles.divider} />
+
+            {/* CTA */}
+            <div style={styles.fieldWrap}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 10 }}>
+                <label style={styles.label}>Add community CTA?</label>
+                <button className={cta ? 'btn-toggle-on' : 'btn-toggle'} onClick={() => setCta(c => !c)}>
+                  {cta ? 'yes' : 'no'}
+                </button>
+              </div>
+              {cta && (
+                <div className="slide-up">
+                  <p style={{ fontSize: 12, color: '#555', marginBottom: 10, fontStyle: 'italic' }}>
+                    "Comment [emoji] to get a personal invitation to the Invisible Monastery community chat."
+                  </p>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    {CTA_EMOJIS.map(e => (
+                      <button
+                        key={e}
+                        className={ctaEmoji === e ? 'emoji-btn emoji-active' : 'emoji-btn'}
+                        onClick={() => setCtaEmoji(e)}
+                      >{e}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <button className="btn-green" onClick={sendToNotion}>Send to Notion via Make.com →</button>
+            <div style={{ textAlign: 'center', marginTop: 12 }}>
+              <button className="btn-ghost" onClick={reset}>start over</button>
+            </div>
+          </div>
+        )}
+
+        {/* SENDING */}
+        {step === 'sending' && (
+          <div className="pulsing" style={styles.centered}>
+            <p style={styles.loadingTitle}>Sending to Make.com...</p>
+            <p style={styles.loadingSubtitle}>Webhook firing → Notion record incoming</p>
+          </div>
+        )}
+
+        {/* DONE */}
+        {step === 'done' && (
+          <div className="slide-up" style={{ textAlign: 'center', padding: '64px 0' }}>
+            <p style={{ ...styles.eyebrow, color: '#1A6B4A', marginBottom: 16 }}>✓ Delivered</p>
+            <h2 style={{ fontFamily: "'Cormorant Garamond', serif", fontSize: 28, fontWeight: 400, fontStyle: 'italic', color: '#E8E0D4', margin: '0 0 10px' }}>
+              "{edited.title}"
+            </h2>
+            <p style={{ fontSize: 13, color: '#555', margin: '0 0 8px', fontStyle: 'italic' }}>
+              {edited.topic} · {edited.engagement_goal} · {edited.hook_type}
+            </p>
+            <p style={{ fontSize: 12, color: '#3A3A42', marginBottom: 40 }}>
+              Make.com received the payload — Notion record is being created with the next open posting slot.
+            </p>
+            <button className="btn-primary" onClick={reset} style={{ maxWidth: 220, margin: '0 auto', display: 'block' }}>
+              New clip →
+            </button>
+          </div>
+        )}
+      </main>
+
+      <footer style={styles.footer}>
+        <p style={{ fontFamily: "'Cormorant Garamond', serif", fontStyle: 'italic', fontSize: 13, color: '#2A2A30', margin: 0 }}>
+          You transmit. The architecture handles everything else.
+        </p>
+      </footer>
+    </div>
+  )
+}
+
+function SetupPanel({ config, onSave, onCancel }) {
+  const [apiKey, setApiKey] = useState(config.apiKey || '')
+  const [webhookUrl, setWebhookUrl] = useState(config.webhookUrl || '')
+
+  return (
+    <div style={styles.setupBox} className="slide-up">
+      <p style={styles.eyebrow}>Configuration</p>
+      <h2 style={{ ...styles.sectionTitle, marginBottom: 6 }}>Setup</h2>
+      <p style={{ fontSize: 13, color: '#555', marginBottom: 28, fontStyle: 'italic', lineHeight: 1.6 }}>
+        Both values are saved to your browser only — never transmitted anywhere except the endpoints you specify.
+      </p>
+
+      <div style={styles.fieldWrap}>
+        <label style={styles.label}>Anthropic API key</label>
+        <input
+          style={styles.input}
+          type="password"
+          placeholder="sk-ant-..."
+          value={apiKey}
+          onChange={e => setApiKey(e.target.value)}
+        />
+        <p style={{ fontSize: 11, color: '#3A3A42', marginTop: 6, fontStyle: 'italic' }}>
+          Get yours at console.anthropic.com → API Keys
+        </p>
+      </div>
+
+      <div style={styles.fieldWrap}>
+        <label style={styles.label}>Make.com webhook URL</label>
+        <input
+          style={styles.input}
+          placeholder="https://hook.make.com/..."
+          value={webhookUrl}
+          onChange={e => setWebhookUrl(e.target.value)}
+        />
+        <p style={{ fontSize: 11, color: '#3A3A42', marginTop: 6, fontStyle: 'italic' }}>
+          In Make.com: New scenario → Custom Webhook module → copy the URL here
+        </p>
+      </div>
+
+      <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
+        <button
+          className="btn-primary"
+          style={{ flex: 1 }}
+          disabled={!apiKey.trim() || !webhookUrl.trim()}
+          onClick={() => onSave({ apiKey: apiKey.trim(), webhookUrl: webhookUrl.trim() })}
+        >Save configuration</button>
+        <button className="btn-ghost" onClick={onCancel}>cancel</button>
+      </div>
+    </div>
+  )
+}
+
+// ── Styles ──────────────────────────────────────────────────────────────────
+
+const styles = {
+  root: {
+    minHeight: '100vh',
+    background: '#0C0C0E',
+    color: '#C8C0B4',
+    fontFamily: 'Georgia, serif',
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  header: {
+    borderBottom: '1px solid #16161A',
+    padding: '28px 32px 22px',
+    position: 'sticky',
+    top: 0,
+    background: '#0C0C0E',
+    zIndex: 10,
+  },
+  headerInner: {
+    maxWidth: 680,
+    margin: '0 auto',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  eyebrow: {
+    fontFamily: "'Cormorant Garamond', serif",
+    fontSize: 10,
+    letterSpacing: '0.22em',
+    color: '#3A3A42',
+    textTransform: 'uppercase',
+    margin: '0 0 4px',
+  },
+  headerTitle: {
+    fontFamily: "'Cormorant Garamond', serif",
+    fontSize: 22,
+    fontWeight: 400,
+    color: '#E8E0D4',
+    margin: 0,
+    letterSpacing: '0.02em',
+  },
+  tagPill: {
+    display: 'inline-block',
+    fontSize: 10,
+    padding: '3px 9px',
+    borderRadius: 2,
+    fontFamily: 'monospace',
+    letterSpacing: '0.05em',
+    border: '1px solid',
+    background: 'transparent',
+  },
+  main: {
+    flex: 1,
+    maxWidth: 680,
+    width: '100%',
+    margin: '0 auto',
+    padding: '36px 32px 0',
+  },
+  footer: {
+    borderTop: '1px solid #16161A',
+    padding: '24px 32px',
+    textAlign: 'center',
+    marginTop: 48,
+  },
+  warning: {
+    fontSize: 12,
+    color: '#555',
+    background: '#111108',
+    border: '1px solid #2A2208',
+    borderRadius: 4,
+    padding: '10px 14px',
+    marginBottom: 24,
+  },
+  warnLink: {
+    color: '#C8922A',
+    cursor: 'pointer',
+    textDecoration: 'underline',
+  },
+  fieldWrap: { marginBottom: 20 },
+  label: {
+    fontSize: 11,
+    letterSpacing: '0.1em',
+    textTransform: 'uppercase',
+    color: '#4A4A52',
+    marginBottom: 6,
+    display: 'block',
+  },
+  input: {
+    background: '#111116',
+    border: '1px solid #222228',
+    color: '#C8C0B4',
+    fontFamily: 'Georgia, serif',
+    fontSize: 14,
+    borderRadius: 4,
+    padding: '11px 14px',
+    width: '100%',
+    outline: 'none',
+    transition: 'border-color 0.15s',
+  },
+  textarea: {
+    background: '#111116',
+    border: '1px solid #222228',
+    color: '#C8C0B4',
+    fontFamily: 'Georgia, serif',
+    fontSize: 14,
+    borderRadius: 4,
+    padding: '12px 14px',
+    width: '100%',
+    outline: 'none',
+    resize: 'vertical',
+    transition: 'border-color 0.15s',
+  },
+  divider: { height: 1, background: '#16161A', margin: '24px 0' },
+  badge: {
+    fontSize: 11,
+    color: '#555',
+    padding: '4px 10px',
+    border: '1px solid #222228',
+    borderRadius: 3,
+    fontFamily: 'Georgia, serif',
+  },
+  sectionTitle: {
+    fontFamily: "'Cormorant Garamond', serif",
+    fontSize: 22,
+    fontWeight: 400,
+    color: '#E8E0D4',
+    margin: 0,
+  },
+  centered: { textAlign: 'center', padding: '80px 0' },
+  loadingTitle: {
+    fontFamily: "'Cormorant Garamond', serif",
+    fontStyle: 'italic',
+    fontSize: 20,
+    color: '#4A4A52',
+    margin: '0 0 8px',
+  },
+  loadingSubtitle: { fontSize: 12, color: '#333', margin: 0 },
+  errorMsg: { fontSize: 13, color: '#A32D2D', marginBottom: 16, fontStyle: 'italic' },
+  overlay: {
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(0,0,0,0.88)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 100,
+    padding: 24,
+  },
+  setupBox: {
+    background: '#111116',
+    border: '1px solid #222228',
+    borderRadius: 6,
+    padding: 32,
+    width: '100%',
+    maxWidth: 480,
+  },
+}
+
+const css = `
+  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400&display=swap');
+  *, *::before, *::after { box-sizing: border-box; }
+  body { margin: 0; }
+  input:focus, textarea:focus { border-color: #3A3020 !important; }
+  input::placeholder, textarea::placeholder { color: #383838; }
+  .btn-primary {
+    background: #1A1408; border: 1px solid #6B4F1A; color: #C8922A;
+    font-family: Georgia, serif; font-size: 13px; padding: 11px 24px;
+    border-radius: 3px; cursor: pointer; letter-spacing: 0.06em;
+    transition: all 0.15s; width: 100%;
+  }
+  .btn-primary:hover { background: #241C0A; border-color: #C8922A; }
+  .btn-primary:disabled { opacity: 0.35; cursor: not-allowed; }
+  .btn-ghost {
+    background: none; border: 1px solid #222228; color: #555;
+    font-family: Georgia, serif; font-size: 12px; padding: 8px 16px;
+    border-radius: 3px; cursor: pointer; transition: all 0.15s; letter-spacing: 0.05em;
+  }
+  .btn-ghost:hover { border-color: #444; color: #888; }
+  .btn-green {
+    background: #0A1A0F; border: 1px solid #1A5C30; color: #3DBF7A;
+    font-family: Georgia, serif; font-size: 13px; padding: 11px 24px;
+    border-radius: 3px; cursor: pointer; letter-spacing: 0.06em;
+    transition: all 0.15s; width: 100%;
+  }
+  .btn-green:hover { background: #0F2418; border-color: #3DBF7A; }
+  .btn-toggle {
+    background: none; border: 1px solid #222228; color: #555;
+    font-family: Georgia, serif; font-size: 12px; padding: 5px 14px;
+    border-radius: 3px; cursor: pointer; transition: all 0.15s;
+  }
+  .btn-toggle-on {
+    background: #1A1408; border: 1px solid #C8922A; color: #C8922A;
+    font-family: Georgia, serif; font-size: 12px; padding: 5px 14px;
+    border-radius: 3px; cursor: pointer; transition: all 0.15s;
+  }
+  .emoji-btn {
+    background: none; border: 1px solid #222228; font-size: 18px;
+    padding: 6px 10px; border-radius: 3px; cursor: pointer; transition: all 0.12s;
+  }
+  .emoji-active { border-color: #6B4F1A; background: #1A1408; }
+  .chip {
+    display: inline-block; font-size: 11px; padding: 3px 10px;
+    border-radius: 12px; border: 1px solid #222228; color: #555;
+    cursor: pointer; margin: 3px; transition: all 0.15s;
+    font-family: Georgia, serif;
+  }
+  .chip:hover { border-color: #444; color: #888; }
+  .chip-active { border-color: #6B4F1A !important; color: #C8922A !important; background: #1A1408; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+  .pulsing { animation: pulse 1.4s ease-in-out infinite; }
+  @keyframes slideUp { from{opacity:0;transform:translateY(10px)} to{opacity:1;transform:none} }
+  .slide-up { animation: slideUp 0.35s ease; }
+`
